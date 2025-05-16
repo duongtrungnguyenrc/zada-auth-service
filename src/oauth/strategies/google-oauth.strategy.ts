@@ -4,9 +4,9 @@ import { Auth, google } from "googleapis";
 import { I18nService } from "nestjs-i18n";
 import { v4 as uuid } from "uuid";
 
-import { UserClientService } from "~user-client";
-import { SessionService } from "~auth/session";
-import { JwtService } from "~auth/jwt";
+import { CreateUserDto, GetCredentialDto, UserClientService, UserCredentialVM, UserVM } from "~user-client";
+import { SessionService } from "~session";
+import { JwtService } from "~jwt";
 
 import { OAuthStrategy } from "../interfaces";
 import { OAUTH_CLIENT } from "../constants";
@@ -42,17 +42,17 @@ export class GoogleOAuthStrategy implements OAuthStrategy {
       personFields: "phoneNumbers",
     });
 
-    const email = userInfo.data.email;
+    const email: string | undefined | null = userInfo.data.email;
     if (!email) {
       throw new UnauthorizedException(this.i18nService.t("auth.no-google-email"));
     }
 
-    const user = await this.userClientService.call("getCredential", { email });
+    const user: UserCredentialVM = await this.userClientService.call<GetCredentialDto, UserCredentialVM>("getCredential", { email });
 
-    let userId = user?.id;
+    let userId: string = user?.id;
 
     if (!user) {
-      const newUser = await this.userClientService.call("create", {
+      const newUser: UserVM = await this.userClientService.call<CreateUserDto, UserVM>("create", {
         fullName: userInfo.data.name ?? "Unknown",
         email,
         password: "-",
@@ -62,8 +62,8 @@ export class GoogleOAuthStrategy implements OAuthStrategy {
       userId = newUser.id;
     }
 
-    const jit = uuid();
-    const token = this.jwtService.generateToken({ sub: userId, jit });
+    const jit: string = uuid();
+    const token: string = this.jwtService.generateToken({ sub: userId, jit });
 
     await this.sessionService.createSession({
       userId,

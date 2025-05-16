@@ -1,4 +1,11 @@
-import { Inject, Injectable, NotAcceptableException, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotAcceptableException,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtPayload, ResponseEntity, UserAgent } from "@duongtrungnguyen/micro-commerce";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { ClientProxy } from "@nestjs/microservices";
@@ -9,11 +16,18 @@ import { Response } from "express";
 import { v4 as uuid } from "uuid";
 import { compare } from "bcrypt";
 
-import { UserVM, CreateUserDto, UserCredentialVM, UserClientService } from "~user-client";
-import { EOauthProvider, OAuthStrategy, OAuthStrategyFactory } from "~auth/oauth";
-import { SessionService } from "~auth/session";
+import {
+  UserVM,
+  CreateUserDto,
+  UserCredentialVM,
+  UserClientService,
+  GetUserRequest,
+  UpdateUserRequest,
+} from "~user-client";
+import { EOauthProvider, OAuthStrategy, OAuthStrategyFactory } from "~/oauth";
+import { SessionService } from "~/session";
 import { NATS_CLIENT } from "~nats-client";
-import { JwtService } from "~auth/jwt";
+import { JwtService } from "~/jwt";
 
 import { ForgotPasswordDto, LoginDto, ResetPasswordDto, VerifyAccountDto } from "./dtos";
 import { ForgotPasswordSession, VerifyAccountSession } from "./types";
@@ -33,7 +47,16 @@ export class AuthService {
   ) {}
 
   async register(data: CreateUserDto, ip: string, response: Response): Promise<void> {
-    const createdUser: UserVM = await this.userClientService.call("create", data);
+    const existingUser: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
+      filter: { email: data.email },
+      select: ["id"],
+    });
+
+    if (existingUser) {
+      throw new ConflictException(this.i18nService.t("auth.user-existed"));
+    }
+
+    const createdUser: UserVM = await this.userClientService.call<CreateUserDto, UserVM>("create", data);
 
     await this.requestVerifyAccount(createdUser.id, ip);
 
@@ -178,7 +201,7 @@ export class AuthService {
   }
 
   async requestVerifyAccount(userId: string, ip: string): Promise<ResponseEntity<undefined>> {
-    const user = await this.userClientService.call("get", {
+    const user: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
       filter: { id: userId },
       select: ["id", "email", "fullName"],
     });
@@ -226,7 +249,7 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call("update", {
+    await this.userClientService.call<UpdateUserRequest, UserVM>("update", {
       filter: { id: cachedSession.userId },
       updates: {
         isVerified: true,
@@ -254,7 +277,7 @@ export class AuthService {
   }
 
   async forgotPassword(data: ForgotPasswordDto, ip: string): Promise<ResponseEntity<undefined>> {
-    const user: UserVM = await this.userClientService.call("get", {
+    const user: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
       filter: { id: data.userId },
       select: ["id", "email", "fullName"],
     });
@@ -302,7 +325,7 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call("update", {
+    await this.userClientService.call<UpdateUserRequest, UserVM>("update", {
       filter: { id: cachedSession.userId },
       updates: {
         password: data.newPassword,

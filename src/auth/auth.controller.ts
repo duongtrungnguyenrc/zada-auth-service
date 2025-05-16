@@ -2,7 +2,7 @@ import { AuthToken, AuthTokenPayload, IpAddress, RequestAgent, UserAgent } from 
 import { Body, Controller, Get, HttpCode, Post, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 
-import { EOauthProvider } from "~auth/oauth";
+import { EOauthProvider } from "~/oauth";
 import { CreateUserDto } from "~user-client";
 
 import { ForgotPasswordDto, LoginDto, ResetPasswordDto, VerifyAccountDto } from "./dtos";

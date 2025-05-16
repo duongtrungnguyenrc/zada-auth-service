@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 
 import { GoogleOAuthStrategy } from "../strategies";
 import { OAuthStrategy } from "../interfaces";
@@ -13,7 +13,7 @@ export class OAuthStrategyFactory {
       case EOauthProvider.google:
         return this.googleOAuthStrategy;
       default:
-        throw new Error("Unsupported OAuth provider");
+        throw new ServiceUnavailableException(`Unsupported ${provider} provider`);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { TypeOrmExceptionInterceptor } from "@duongtrungnguyen/micro-commerce";
+import { GlobalExceptionsFilter } from "@duongtrungnguyen/micro-commerce";
 import { createNestroApplication } from "@duongtrungnguyen/nestro";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -22,7 +22,7 @@ async function bootstrap() {
   const i18nService = app.get<I18nService>(I18nService);
 
   app.useGlobalPipes(new ValidationPipe());
-  app.useGlobalInterceptors(new TypeOrmExceptionInterceptor(i18nService));
+  app.useGlobalFilters(new GlobalExceptionsFilter(i18nService));
 
   await app.listen();
 }

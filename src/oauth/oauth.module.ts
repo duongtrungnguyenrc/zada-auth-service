@@ -3,8 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { Auth, google } from "googleapis";
 
 import { UserClientModule } from "~user-client";
-import { SessionModule } from "~auth/session";
-import { JwtModule } from "~auth/jwt";
+import { SessionModule } from "~session";
+import { JwtModule } from "~jwt";
 
 import { GoogleOAuthStrategy } from "./strategies";
 import { OAuthStrategyFactory } from "./factories";
@@ -16,11 +16,7 @@ import { OAUTH_CLIENT } from "./constants";
     {
       provide: OAUTH_CLIENT,
       useFactory: (configService: ConfigService) =>
-        new google.auth.OAuth2(
-          configService.get<string>("OAUTH_CLIENT_ID"),
-          configService.get<string>("OAUTH_CLIENT_SECRET"),
-          configService.get<string>("OAUTH_CALLBACK_URL"),
-        ),
+        new google.auth.OAuth2(configService.get<string>("OAUTH_CLIENT_ID"), configService.get<string>("OAUTH_CLIENT_SECRET"), configService.get<string>("OAUTH_CALLBACK_URL")),
       inject: [ConfigService],
     } as FactoryProvider<Auth.OAuth2Client>,
     GoogleOAuthStrategy,

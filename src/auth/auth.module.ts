@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
 
 import { UserClientModule } from "~user-client";
-import { SessionModule } from "~auth/session";
-import { OauthModule } from "~auth/oauth";
-import { JwtModule } from "~auth/jwt";
+import { SessionModule } from "~/session";
+import { OauthModule } from "~/oauth";
+import { JwtModule } from "~/jwt";
 
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";

@@ -1,11 +1,8 @@
 {
-  "already-exists": "đã được sử dụng",
-  "foreign-key-violation": "Tham chiếu không hợp lệ",
-  "not-null": "Thiếu trường bắt buộc",
-  "check-violation": "Dữ liệu không hợp lệ",
-  "content-too-long": "nội dung quá dài",
-  "number-out-of-range": "Giá trị vượt quá giới hạn cho phép",
-  "invalid-date-format": "Định dạng ngày giờ không hợp lệ",
-  "schema-error": "Lỗi cấu trúc cơ sở dữ liệu",
-  "unknown": "Lỗi hệ thống từ cơ sở dữ liệu"
+  "internal_server_error": "Lỗi máy chủ nội bộ",
+  "unique_constraint": "Dữ liệu trùng lặp đã tồn tại",
+  "foreign_key_constraint": "Không tìm thấy dữ liệu liên kết",
+  "not_null_constraint": "Thiếu trường bắt buộc",
+  "invalid_text": "Định dạng dữ liệu không hợp lệ",
+  "column_not_exist": "Cột không tồn tại trong truy vấn"
 }

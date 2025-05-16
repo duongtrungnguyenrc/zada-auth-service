@@ -1,11 +1,8 @@
 {
-  "already-exists": "already exists",
-  "foreign-key-violation": "Invalid reference to another resource",
-  "not-null": "A required field is missing",
-  "check-violation": "Input does not satisfy required condition",
-  "content-too-long": "Input content is too long",
-  "number-out-of-range": "Number is out of allowed range",
-  "invalid-date-format": "Invalid date format",
-  "schema-error": "Database schema error",
-  "unknown": "Unexpected database error"
+  "internal_server_error": "Internal server error",
+  "unique_constraint": "A record with the same value already exists",
+  "foreign_key_constraint": "Referenced entity does not exist",
+  "not_null_constraint": "Missing required field",
+  "invalid_text": "Invalid input format",
+  "column_not_exist": "Column does not exist"
 }

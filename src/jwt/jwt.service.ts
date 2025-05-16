@@ -5,7 +5,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 @Injectable()
 export class JwtService {
-  private cacheKey: string = "ACCESS_REVOKED";
+  private cacheKey: string = "BLACKLIST_";
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
