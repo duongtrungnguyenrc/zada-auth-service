@@ -7,7 +7,9 @@ import { SessionModule } from "~session";
 import { JwtModule } from "~jwt";
 
 import { GoogleOAuthStrategy } from "./strategies";
-import { OAuthStrategyFactory } from "./factories";
+import { OauthController } from "./oauth.controller";
+import { OauthService } from "./oauth.service";
+import { OAuthFactory } from "./factories";
 import { OAUTH_CLIENT } from "./constants";
 
 @Module({
@@ -20,8 +22,10 @@ import { OAUTH_CLIENT } from "./constants";
       inject: [ConfigService],
     } as FactoryProvider<Auth.OAuth2Client>,
     GoogleOAuthStrategy,
-    OAuthStrategyFactory,
+    OAuthFactory,
+    OauthService,
   ],
-  exports: [GoogleOAuthStrategy, OAuthStrategyFactory],
+  exports: [GoogleOAuthStrategy, OAuthFactory],
+  controllers: [OauthController],
 })
 export class OauthModule {}

@@ -1,0 +1,11 @@
+{
+  "invalid-email": "Invalid email format.",
+  "invalid-password": "Password must be a minimum 6 characters string, include upper case, lower case and special characters.",
+  "invalid-string": "This field must be a string.",
+  "invalid-url": "URL invalid",
+  "invalid-id": "Invalid id format.",
+  "invalid-otp": "OTP must be exactly 6 characters.",
+  "invalid-phone": "Invalid phone format",
+  "invalid-boolean": "Invalid boolean format"
+}
+

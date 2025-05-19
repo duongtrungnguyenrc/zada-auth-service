@@ -15,26 +15,26 @@ export interface CreateUserDto {
   fullName: string;
   email: string;
   avatarUrl?: string | undefined;
-  password: string;
+  passwordHash: string;
   phoneNumber: string;
 }
 
-export interface GetCredentialDto {
-  email: string;
-}
-
 export interface UpdateUserDto {
-  fullName?: string;
+  fullName?: string | undefined;
   avatarUrl?: string | undefined;
-  password?: string;
-  phoneNumber?: string;
-  isVerified?: boolean;
-  isActive?: boolean;
+  passwordHash?: string | undefined;
+  phoneNumber?: string | undefined;
+  isVerified?: boolean | undefined;
+  isActive?: boolean | undefined;
 }
 
 export interface UserFilterDto {
   id?: string | undefined;
   email?: string | undefined;
+}
+
+export interface CreateUserRequest {
+  data: CreateUserDto | undefined;
 }
 
 export interface UpdateUserRequest {
@@ -47,6 +47,11 @@ export interface GetUserRequest {
   select: string[];
 }
 
+export interface GetUsersRequest {
+  filter: UserFilterDto | undefined;
+  select: string[];
+}
+
 export interface UserVM {
   id: string;
   email: string;
@@ -55,15 +60,17 @@ export interface UserVM {
   fullName: string;
   createdAt: Date | undefined;
   updatedAt: Date | undefined;
+  passwordHash: string;
   isActive: boolean;
   isVerified: boolean;
 }
 
-export interface UserCredentialVM {
-  id: string;
-  email: string;
-  passwordHash: string;
-  isActive: boolean;
+export interface UserResponse {
+  data?: UserVM | undefined;
+}
+
+export interface UsersResponse {
+  data: UserVM[];
 }
 
 export const USER_PACKAGE_NAME = "user";
@@ -78,28 +85,28 @@ wrappers[".google.protobuf.Timestamp"] = {
 } as any;
 
 export interface UserServiceClient {
-  create(request: CreateUserDto): Observable<UserVM>;
+  create(request: CreateUserRequest): Observable<UserResponse>;
 
-  getCredential(request: GetCredentialDto): Observable<UserCredentialVM>;
+  update(request: UpdateUserRequest): Observable<UserResponse>;
 
-  update(request: UpdateUserRequest): Observable<UserVM>;
+  get(request: GetUserRequest): Observable<UserResponse>;
 
-  get(request: GetUserRequest): Observable<UserVM>;
+  getUsers(request: GetUsersRequest): Observable<UsersResponse>;
 }
 
 export interface UserServiceController {
-  create(request: CreateUserDto): Promise<UserVM> | Observable<UserVM> | UserVM;
+  create(request: CreateUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
 
-  getCredential(request: GetCredentialDto): Promise<UserCredentialVM> | Observable<UserCredentialVM> | UserCredentialVM;
+  update(request: UpdateUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
 
-  update(request: UpdateUserRequest): Promise<UserVM> | Observable<UserVM> | UserVM;
+  get(request: GetUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
 
-  get(request: GetUserRequest): Promise<UserVM> | Observable<UserVM> | UserVM;
+  getUsers(request: GetUsersRequest): Promise<UsersResponse> | Observable<UsersResponse> | UsersResponse;
 }
 
 export function UserServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ["create", "getCredential", "update", "get"];
+    const grpcMethods: string[] = ["create", "update", "get", "getUsers"];
     for (const method of grpcMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
       GrpcMethod("UserService", method)(constructor.prototype[method], method, descriptor);

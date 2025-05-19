@@ -1,11 +1,11 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Injectable, BadRequestException } from "@nestjs/common";
 
 import { GoogleOAuthStrategy } from "../strategies";
 import { OAuthStrategy } from "../interfaces";
 import { EOauthProvider } from "../enums";
 
 @Injectable()
-export class OAuthStrategyFactory {
+export class OAuthFactory {
   constructor(private readonly googleOAuthStrategy: GoogleOAuthStrategy) {}
 
   getStrategy(provider: EOauthProvider): OAuthStrategy {
@@ -13,7 +13,8 @@ export class OAuthStrategyFactory {
       case EOauthProvider.google:
         return this.googleOAuthStrategy;
       default:
-        throw new ServiceUnavailableException(`Unsupported ${provider} provider`);
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+        throw new BadRequestException(`Unsupported ${provider} provider`);
     }
   }
 }

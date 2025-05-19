@@ -1,5 +1,5 @@
+import { DiscoveryService, Service } from "@duongtrungnguyen/nestro";
 import { GrpcClient } from "@duongtrungnguyen/micro-commerce";
-import { DiscoveryService } from "@duongtrungnguyen/nestro";
 import { Inject } from "@nestjs/common";
 import * as path from "path";
 
@@ -9,7 +9,7 @@ export class UserClientService {
   constructor(@Inject(DiscoveryService) private readonly discoveryService: DiscoveryService) {}
 
   call<T = any, K = any>(methodName: keyof UserServiceClient, payload: T): Promise<K> {
-    return this.discoveryService.executeWithRetry("user", (service) => {
+    return this.discoveryService.discover("user", (service: Service) => {
       const { grpcUrl } = service.metadata!;
 
       const packageName = USER_PACKAGE_NAME;

@@ -9,3 +9,5 @@ export type VerifyAccountSession = {
   userId: string;
   ip: string;
 };
+
+export type VerifyAccountStatus = "verify-account-success" | "register-success";

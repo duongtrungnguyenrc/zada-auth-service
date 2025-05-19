@@ -1,0 +1,10 @@
+{
+  "invalid-string": "Trường này phải là chuỗi.",
+  "invalid-email": "Email không hợp lệ.",
+  "invalid-url": "URL không hợp lệ.",
+  "invalid-phone": "Số điện thoại không hợp lệ.",
+  "invalid-otp": "Mã OTP không hợp lệ",
+  "invalid-password": "Mật khẩu phải là chuỗi tối thiểu 6 ký tự, trong đó có ký tự viết hoa, thường và 1 ký tự đặc biệt.",
+  "invalid-id": "ID không hợp lệ",
+  "invalid-boolean": "Boolean không hợp lệ"
+}

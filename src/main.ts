@@ -1,13 +1,14 @@
-import { GlobalExceptionsFilter } from "@duongtrungnguyen/micro-commerce";
 import { createNestroApplication } from "@duongtrungnguyen/nestro";
-import { ValidationPipe } from "@nestjs/common";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
-import { I18nService } from "nestjs-i18n";
+import { I18nMiddleware } from "nestjs-i18n";
 
-import { AppModule } from "./app.module";
+import { AppModule } from "~app.module";
 
 async function bootstrap() {
   const configService: ConfigService = new ConfigService();
+
+  const serviceName = configService.getOrThrow<string>("SERVICE_NAME");
 
   const app = await createNestroApplication(AppModule, {
     server: {
@@ -15,14 +16,21 @@ async function bootstrap() {
       port: configService.getOrThrow<number>("NESTRO_PORT"),
     },
     client: {
-      name: configService.getOrThrow<string>("SERVICE_NAME"),
+      name: serviceName,
+      host: configService.getOrThrow<string>("SERVICE_HOST"),
+      port: configService.getOrThrow<number>("SERVICE_PORT"),
     },
   });
 
-  const i18nService = app.get<I18nService>(I18nService);
+  app.use(I18nMiddleware);
+  app.setGlobalPrefix("auth");
 
-  app.useGlobalPipes(new ValidationPipe());
-  app.useGlobalFilters(new GlobalExceptionsFilter(i18nService));
+  const documentConfig = new DocumentBuilder().setTitle(serviceName).build();
+  const swaggerDocument = SwaggerModule.createDocument(app, documentConfig);
+
+  SwaggerModule.setup("api", app, swaggerDocument, {
+    jsonDocumentUrl: "api-docs-json",
+  });
 
   await app.listen();
 }

@@ -43,7 +43,7 @@ export class JwtService {
       if (await this.isRevoked(token)) return null;
 
       return this.jwtService.verify<JwtPayload>(token);
-    } catch (error) {
+    } catch {
       return null;
     }
   }

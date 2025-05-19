@@ -5,10 +5,10 @@ import "google/protobuf/timestamp.proto";
 package user;
 
 service UserService {
-  rpc create (CreateUserDto) returns (UserVM);
-  rpc getCredential (GetCredentialDto) returns (UserCredentialVM);
-  rpc update (UpdateUserRequest) returns (UserVM);
-  rpc get (GetUserRequest) returns (UserVM);
+  rpc create (CreateUserRequest) returns (UserResponse);
+  rpc update (UpdateUserRequest) returns (UserResponse);
+  rpc get (GetUserRequest) returns (UserResponse);
+  rpc getUsers (GetUsersRequest) returns (UsersResponse);
 }
 
 // --- Request DTOs ---
@@ -17,18 +17,14 @@ message CreateUserDto {
   string fullName = 1;
   string email = 2;
   optional string avatarUrl = 3;
-  string password = 4;
+  string passwordHash = 4;
   string phoneNumber = 5;
-}
-
-message GetCredentialDto {
-  string email = 1;
 }
 
 message UpdateUserDto {
   optional string fullName = 1;
   optional string avatarUrl = 2;
-  optional string password = 3;
+  optional string passwordHash = 3;
   optional string phoneNumber = 4;
   optional bool isVerified = 5;
   optional bool isActive = 6;
@@ -39,12 +35,24 @@ message UserFilterDto {
   optional string email = 2;
 }
 
+
+/// --- Requests---
+
+message CreateUserRequest {
+  CreateUserDto data = 1;
+}
+
 message UpdateUserRequest {
   UserFilterDto filter = 1;
   UpdateUserDto updates = 2;
 }
 
 message GetUserRequest {
+  UserFilterDto filter = 1;
+  repeated string select = 2;
+}
+
+message GetUsersRequest {
   UserFilterDto filter = 1;
   repeated string select = 2;
 }
@@ -59,13 +67,18 @@ message UserVM {
   string fullName = 5;
   google.protobuf.Timestamp createdAt = 6;
   google.protobuf.Timestamp updatedAt = 7;
-  bool isActive = 8;
-  bool isVerified = 9;
+  string passwordHash = 8;
+  bool isActive = 9;
+  bool isVerified = 10;
 }
 
-message UserCredentialVM {
-  string id = 1;
-  string email = 2;
-  string passwordHash = 3;
-  bool isActive = 4;
+// --- Responses ---
+
+message UserResponse {
+  optional UserVM data = 1;
 }
+
+message UsersResponse {
+  repeated UserVM data = 1;
+}
+

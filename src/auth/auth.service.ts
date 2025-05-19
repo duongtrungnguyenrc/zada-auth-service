@@ -1,37 +1,21 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotAcceptableException,
-  NotFoundException,
-  UnauthorizedException,
-} from "@nestjs/common";
-import { JwtPayload, ResponseEntity, UserAgent } from "@duongtrungnguyen/micro-commerce";
+import { ConflictException, Inject, Injectable, InternalServerErrorException, NotAcceptableException, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { JwtPayload, UserAgent } from "@duongtrungnguyen/micro-commerce";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { ClientProxy } from "@nestjs/microservices";
+import { compare, genSalt, hash } from "bcrypt";
 import { ConfigService } from "@nestjs/config";
 import { I18nService } from "nestjs-i18n";
 import { Cache } from "cache-manager";
-import { Response } from "express";
 import { v4 as uuid } from "uuid";
-import { compare } from "bcrypt";
 
-import {
-  UserVM,
-  CreateUserDto,
-  UserCredentialVM,
-  UserClientService,
-  GetUserRequest,
-  UpdateUserRequest,
-} from "~user-client";
-import { EOauthProvider, OAuthStrategy, OAuthStrategyFactory } from "~/oauth";
+import { UserVM, UserClientService, GetUserRequest, UpdateUserRequest, CreateUserRequest, UserResponse } from "~user-client";
 import { SessionService } from "~/session";
 import { NATS_CLIENT } from "~nats-client";
 import { JwtService } from "~/jwt";
 
-import { ForgotPasswordDto, LoginDto, ResetPasswordDto, VerifyAccountDto } from "./dtos";
-import { ForgotPasswordSession, VerifyAccountSession } from "./types";
-import { LoginVM } from "./view-models";
+import { ForgotPasswordDto, UpdatePasswordDto, LoginDto, RegisterAccountDto, ResetPasswordDto, VerifyAccountDto } from "./dtos";
+import { ForgotPasswordSession, VerifyAccountStatus, VerifyAccountSession } from "./types";
+import { LoginVM } from "./vms";
 
 @Injectable()
 export class AuthService {
@@ -39,15 +23,14 @@ export class AuthService {
     @Inject(NATS_CLIENT) private readonly natsClient: ClientProxy,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly userClientService: UserClientService,
-    private readonly oauthFactory: OAuthStrategyFactory,
     private readonly sessionService: SessionService,
     private readonly configService: ConfigService,
     private readonly i18nService: I18nService,
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(data: CreateUserDto, ip: string, response: Response): Promise<void> {
-    const existingUser: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
+  async register(data: RegisterAccountDto, ip: string): Promise<string> {
+    const { data: existingUser } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
       filter: { email: data.email },
       select: ["id"],
     });
@@ -56,28 +39,39 @@ export class AuthService {
       throw new ConflictException(this.i18nService.t("auth.user-existed"));
     }
 
-    const createdUser: UserVM = await this.userClientService.call<CreateUserDto, UserVM>("create", data);
+    const { password, ...restUser } = data;
+
+    const { data: createdUser } = await this.userClientService.call<CreateUserRequest, UserResponse>("create", {
+      data: { ...restUser, passwordHash: await this._hashPassword(password) },
+    });
+
+    if (!createdUser) {
+      throw new InternalServerErrorException(this.i18nService.t("auth.register-failed"));
+    }
 
     await this.requestVerifyAccount(createdUser.id, ip);
 
     const clientBaseUrl: string = this.configService.getOrThrow<string>("CLIENT_BASE_URL");
     const accountVerifyPath: string = this.configService.getOrThrow<string>("ACCOUNT_VERIFY_PATH");
 
-    response.redirect(`${clientBaseUrl}/${accountVerifyPath}?userId=${createdUser.id}`);
+    return `${clientBaseUrl}/${accountVerifyPath}?userId=${createdUser.id}`;
   }
 
-  async login(data: LoginDto, ip: string, userAgent: UserAgent): Promise<ResponseEntity<LoginVM>> {
-    const credential: UserCredentialVM = await this.userClientService.call("getCredential", data);
+  async login(data: LoginDto, ip: string, userAgent: UserAgent): Promise<LoginVM> {
+    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
+      filter: { email: data.email },
+      select: ["id", "passwordHash", "isActive"],
+    });
 
-    if (!credential) {
+    if (!user) {
       throw new UnauthorizedException(this.i18nService.t("auth.user-not-found"));
     }
 
-    if (!credential.isActive) {
+    if (!user.isActive) {
       throw new UnauthorizedException(this.i18nService.t("auth.user-inactive"));
     }
 
-    const matchPassword: boolean = await compare(data.password, credential.passwordHash);
+    const matchPassword: boolean = await compare(data.password, user.passwordHash);
 
     if (!matchPassword) {
       throw new UnauthorizedException(this.i18nService.t("auth.invalid-login"));
@@ -86,53 +80,23 @@ export class AuthService {
     const jit: string = uuid();
 
     const token: string = this.jwtService.generateToken({
-      sub: credential.id,
+      sub: user.id,
       jit,
     });
 
     await this.sessionService.createSession({
-      userId: credential.id,
+      userId: user.id,
       jit,
       ip,
       userAgent,
     });
 
     return {
-      message: this.i18nService.t("auth.login-success"),
-      data: {
-        token,
-      },
-      code: 200,
+      token,
     };
   }
 
-  getOauthUrl(provider: EOauthProvider): ResponseEntity<string> {
-    const oauthStrategy: OAuthStrategy = this.oauthFactory.getStrategy(provider);
-
-    return {
-      message: this.i18nService.t("auth.get-oauth-success"),
-      data: oauthStrategy.getAuthUrl(),
-      code: 200,
-    };
-  }
-
-  async handleOAuthCallback(
-    provider: EOauthProvider,
-    code: string,
-    ip: string,
-    userAgent: UserAgent,
-    response: Response,
-  ): Promise<void> {
-    const strategy: OAuthStrategy = this.oauthFactory.getStrategy(provider);
-
-    const token: string = await strategy.handleCallback(code, ip, userAgent);
-    const clientBaseUrl: string = this.configService.getOrThrow<string>("CLIENT_BASE_URL");
-    const oauthWebhooksPath: string = this.configService.getOrThrow<string>("OAUTH_WEBHOOKS_PATH");
-
-    response.redirect(`${clientBaseUrl}/${oauthWebhooksPath}?token=${token}`);
-  }
-
-  async logOut(oldToken: string): Promise<ResponseEntity<undefined>> {
+  async logOut(oldToken: string): Promise<void> {
     const payload: JwtPayload | null = await this.jwtService.verifyToken(oldToken);
 
     if (!payload) {
@@ -153,15 +117,9 @@ export class AuthService {
       ),
       this.jwtService.revokeToken(payload),
     ]);
-
-    return {
-      message: this.i18nService.t("auth.logout-success"),
-      data: undefined,
-      code: 200,
-    };
   }
 
-  async refreshToken(oldToken: string, ip: string, userAgent: UserAgent): Promise<ResponseEntity<LoginVM>> {
+  async refreshToken(oldToken: string, ip: string, userAgent: UserAgent): Promise<LoginVM> {
     if (!oldToken) {
       throw new UnauthorizedException(this.i18nService.t("auth.no-auth"));
     }
@@ -192,16 +150,12 @@ export class AuthService {
     await this.jwtService.revokeToken(payload);
 
     return {
-      code: 200,
-      message: this.i18nService.t("auth.refresh-success"),
-      data: {
-        token: newToken,
-      },
+      token: newToken,
     };
   }
 
-  async requestVerifyAccount(userId: string, ip: string): Promise<ResponseEntity<undefined>> {
-    const user: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
+  async requestVerifyAccount(userId: string, ip: string): Promise<boolean> {
+    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
       filter: { id: userId },
       select: ["id", "email", "fullName"],
     });
@@ -213,11 +167,7 @@ export class AuthService {
     const otp: string = this._generateOtp();
     const sessionId: string = uuid();
 
-    await this.cacheManager.set<VerifyAccountSession>(
-      `otp:verify-user:${sessionId}`,
-      { otp, userId: userId, ip },
-      15 * 60 * 1000,
-    );
+    await this.cacheManager.set<VerifyAccountSession>(`otp:verify-user:${sessionId}`, { otp, userId: userId, ip }, 15 * 60 * 1000);
 
     this.natsClient.emit("noti.email.verify-account", {
       otp,
@@ -225,17 +175,11 @@ export class AuthService {
       fullName: user.fullName,
     });
 
-    return {
-      message: this.i18nService.t("auth.send-verify-account-success"),
-      data: undefined,
-      code: 201,
-    };
+    return true;
   }
 
-  async verifyAccount(data: VerifyAccountDto, ip: string, newUser?: UserVM): Promise<ResponseEntity<undefined>> {
-    const cachedSession: ForgotPasswordSession | null = await this.cacheManager.get<ForgotPasswordSession>(
-      `otp:verify-account:${data.sessionId}`,
-    );
+  async verifyAccount(data: VerifyAccountDto, ip: string, newUser?: UserVM): Promise<VerifyAccountStatus> {
+    const cachedSession: ForgotPasswordSession | null = await this.cacheManager.get<ForgotPasswordSession>(`otp:verify-account:${data.sessionId}`);
 
     if (!cachedSession) {
       throw new NotAcceptableException(this.i18nService.t("auth.no-verify-account-found"));
@@ -249,7 +193,7 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call<UpdateUserRequest, UserVM>("update", {
+    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
       filter: { id: cachedSession.userId },
       updates: {
         isVerified: true,
@@ -262,22 +206,14 @@ export class AuthService {
         email: newUser.email,
       });
 
-      return {
-        message: this.i18nService.t("auth.register-success"),
-        data: undefined,
-        code: 201,
-      };
+      return "register-success";
     }
 
-    return {
-      message: this.i18nService.t("auth.verify-account-success"),
-      data: undefined,
-      code: 200,
-    };
+    return "verify-account-success";
   }
 
-  async forgotPassword(data: ForgotPasswordDto, ip: string): Promise<ResponseEntity<undefined>> {
-    const user: UserVM = await this.userClientService.call<GetUserRequest, UserVM>("get", {
+  async forgotPassword(data: ForgotPasswordDto, ip: string): Promise<boolean> {
+    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
       filter: { id: data.userId },
       select: ["id", "email", "fullName"],
     });
@@ -289,11 +225,7 @@ export class AuthService {
     const otp: string = this._generateOtp();
     const sessionId: string = uuid();
 
-    await this.cacheManager.set<ForgotPasswordSession>(
-      `otp:reset-password:${sessionId}`,
-      { otp, userId: user.id, ip },
-      15 * 60 * 1000,
-    );
+    await this.cacheManager.set<ForgotPasswordSession>(`otp:reset-password:${sessionId}`, { otp, userId: user.id, ip }, 15 * 60 * 1000);
 
     this.natsClient.emit("noti.email.reset-password", {
       otp,
@@ -301,17 +233,11 @@ export class AuthService {
       fullName: user.fullName,
     });
 
-    return {
-      message: this.i18nService.t("auth.forgot-password-success"),
-      data: undefined,
-      code: 201,
-    };
+    return true;
   }
 
-  async resetPassword(data: ResetPasswordDto, ip: string): Promise<ResponseEntity<undefined>> {
-    const cachedSession: ForgotPasswordSession | null = await this.cacheManager.get<ForgotPasswordSession>(
-      `otp:reset-password:${data.sessionId}`,
-    );
+  async resetPassword(data: ResetPasswordDto, ip: string): Promise<boolean> {
+    const cachedSession: ForgotPasswordSession | null = await this.cacheManager.get<ForgotPasswordSession>(`otp:reset-password:${data.sessionId}`);
 
     if (!cachedSession) {
       throw new NotAcceptableException(this.i18nService.t("auth.no-reset-password-found"));
@@ -325,18 +251,37 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call<UpdateUserRequest, UserVM>("update", {
+    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
       filter: { id: cachedSession.userId },
       updates: {
-        password: data.newPassword,
+        passwordHash: await this._hashPassword(data.newPassword),
       },
     });
 
-    return {
-      message: this.i18nService.t("auth.reset-password-success"),
-      data: undefined,
-      code: 201,
-    };
+    return true;
+  }
+
+  async updatePassword(userId: string, data: UpdatePasswordDto): Promise<boolean> {
+    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", { filter: { id: userId }, select: ["passwordHash"] });
+
+    if (!user) {
+      throw new NotAcceptableException(this.i18nService.t("auth.user-not-found"));
+    }
+
+    const isPasswordMatch = await compare(user.passwordHash, data.password);
+
+    if (isPasswordMatch) {
+      throw new NotAcceptableException(this.i18nService.t("auth.wrong-password"));
+    }
+
+    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
+      filter: { id: userId },
+      updates: {
+        passwordHash: await this._hashPassword(data.newPassword),
+      },
+    });
+
+    return true;
   }
 
   /* Internal support methods */
@@ -346,5 +291,11 @@ export class AuthService {
       .fill(0)
       .map(() => Math.floor(Math.random() * 10))
       .join("");
+  }
+
+  private async _hashPassword(originalPassword: string): Promise<string> {
+    const salt = await genSalt(5);
+
+    return await hash(originalPassword, salt);
   }
 }

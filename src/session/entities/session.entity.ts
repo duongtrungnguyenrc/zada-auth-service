@@ -20,7 +20,7 @@ export class SessionEntity implements ISession {
   @Column()
   ip: string;
 
-  @Column({ type: "date", nullable: true })
+  @Column({ type: "timestamp", nullable: true })
   expiresAt: Date | null;
 
   @CreateDateColumn()

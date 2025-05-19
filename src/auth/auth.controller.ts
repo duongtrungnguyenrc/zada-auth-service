@@ -1,71 +1,166 @@
-import { AuthToken, AuthTokenPayload, IpAddress, RequestAgent, UserAgent } from "@duongtrungnguyen/micro-commerce";
-import { Body, Controller, Get, HttpCode, Post, Query, Res } from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+  ApiBadRequestResponse,
+  ApiPermanentRedirectResponse,
+} from "@nestjs/swagger";
+import {
+  AuthToken,
+  AuthTokenPayload,
+  BadRequestExceptionVM,
+  HttpExceptionsFilter,
+  IpAddress,
+  RequestAgent,
+  ResponseVM,
+  UnauthorizedExceptionVM,
+  UserAgent,
+} from "@duongtrungnguyen/micro-commerce";
+import { Body, Controller, HttpCode, Post, Put, Res, UseFilters, UsePipes, ValidationPipe } from "@nestjs/common";
+import { I18nService } from "nestjs-i18n";
 import { Response } from "express";
 
-import { EOauthProvider } from "~/oauth";
-import { CreateUserDto } from "~user-client";
-
-import { ForgotPasswordDto, LoginDto, ResetPasswordDto, VerifyAccountDto } from "./dtos";
+import { ForgotPasswordDto, LoginDto, RegisterAccountDto, ResetPasswordDto, VerifyAccountDto, UpdatePasswordDto } from "./dtos";
+import { LoginResponseVM, LoginVM } from "./vms";
 import { AuthService } from "./auth.service";
 
-@Controller("auth")
+@ApiTags("Auth")
+@Controller()
+@UsePipes(ValidationPipe)
+@UseFilters(HttpExceptionsFilter)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private i18nService: I18nService,
+  ) {}
 
   @Post("register")
-  async register(@Body() data: CreateUserDto, @IpAddress() ip: string, @Res() response: Response) {
-    return await this.authService.register(data, ip, response);
+  @ApiOperation({ summary: "Register new user account" })
+  @ApiBody({ type: RegisterAccountDto })
+  @ApiPermanentRedirectResponse({ description: "Account registered successfully. Redirect to verify user" })
+  @ApiBadRequestResponse({ description: "Validation failed", type: BadRequestExceptionVM })
+  async register(@Body() data: RegisterAccountDto, @IpAddress() ip: string, @Res() response: Response): Promise<void> {
+    const redirectUrl = await this.authService.register(data, ip);
+
+    return response.redirect(redirectUrl);
   }
 
   @Post("login")
   @HttpCode(200)
-  async login(@Body() data: LoginDto, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent) {
-    return await this.authService.login(data, ip, userAgent);
+  @ApiOperation({ summary: "Login with email and password" })
+  @ApiBody({ type: LoginDto })
+  @ApiOkResponse({ description: "Login successful", type: LoginVM })
+  @ApiUnauthorizedResponse({ description: "Invalid credentials", type: UnauthorizedExceptionVM })
+  async login(@Body() data: LoginDto, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent): Promise<ResponseVM<LoginVM>> {
+    const responseData = await this.authService.login(data, ip, userAgent);
+
+    return {
+      message: this.i18nService.t("auth.login-success"),
+      data: responseData,
+    };
   }
 
   @Post("logout")
-  async logOut(@AuthToken() token: string) {
-    return await this.authService.logOut(token);
+  @ApiOperation({ summary: "Logout current user" })
+  @ApiBearerAuth()
+  @ApiOkResponse({ description: "Logout success", type: ResponseVM })
+  @ApiUnauthorizedResponse({ description: "Missing auth token", type: UnauthorizedExceptionVM })
+  async logOut(@AuthToken() token: string): Promise<ResponseVM> {
+    await this.authService.logOut(token);
+
+    return {
+      message: this.i18nService.t("auth.logout-success"),
+      data: undefined,
+    };
   }
 
   @Post("refresh-token")
-  async refreshToken(@AuthToken() oldToken: string, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent) {
-    return this.authService.refreshToken(oldToken, ip, userAgent);
+  @ApiOperation({ summary: "Refresh access token using old token" })
+  @ApiBearerAuth()
+  @ApiCreatedResponse({ description: "Token refreshed successfully", type: LoginResponseVM })
+  @ApiUnauthorizedResponse({ description: "Missing old token", type: UnauthorizedExceptionVM })
+  async refreshToken(@AuthToken() oldToken: string, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent): Promise<LoginResponseVM> {
+    const responseData = await this.authService.refreshToken(oldToken, ip, userAgent);
+
+    return {
+      message: this.i18nService.t("auth.refresh-success"),
+      data: responseData,
+    };
   }
 
   @Post("forgot-password")
-  async forgotPassword(@Body() data: ForgotPasswordDto, @IpAddress() ip: string) {
-    return this.authService.forgotPassword(data, ip);
+  @ApiOperation({ summary: "Request password reset email" })
+  @ApiBody({ type: ForgotPasswordDto })
+  @ApiCreatedResponse({ description: "Reset email sent", type: ResponseVM })
+  @ApiBadRequestResponse({ description: "Invalid email", type: BadRequestExceptionVM })
+  async forgotPassword(@Body() data: ForgotPasswordDto, @IpAddress() ip: string): Promise<ResponseVM> {
+    await this.authService.forgotPassword(data, ip);
+
+    return {
+      message: this.i18nService.t("auth.forgot-password-success"),
+      data: undefined,
+    };
   }
 
   @Post("reset-password")
-  async resetPassword(@Body() data: ResetPasswordDto, @IpAddress() ip: string) {
-    return this.authService.resetPassword(data, ip);
+  @ApiOperation({ summary: "Reset password" })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiCreatedResponse({ description: "Password reset successfully", type: ResponseVM })
+  @ApiBadRequestResponse({ description: "Invalid token or password", type: BadRequestExceptionVM })
+  async resetPassword(@Body() data: ResetPasswordDto, @IpAddress() ip: string): Promise<ResponseVM> {
+    await this.authService.resetPassword(data, ip);
+
+    return {
+      message: this.i18nService.t("auth.reset-password-success"),
+      data: undefined,
+    };
+  }
+
+  @Put("password")
+  @ApiOperation({ summary: "Update password" })
+  @ApiBearerAuth()
+  @ApiBody({ type: UpdatePasswordDto })
+  @ApiOkResponse({ description: "Updated password success", type: ResponseVM })
+  @ApiUnauthorizedResponse({ description: "Missing auth token", type: UnauthorizedExceptionVM })
+  @ApiBadRequestResponse({ description: "Validation failed", type: BadRequestExceptionVM })
+  async updatePassword(@AuthTokenPayload("sub") userId: string, @Body() data: UpdatePasswordDto): Promise<ResponseVM> {
+    await this.authService.updatePassword(userId, data);
+
+    return {
+      message: this.i18nService.t("auth.update-password-success"),
+      data: undefined,
+    };
   }
 
   @Post("request-verify-account")
-  async requestVerifyAccount(@AuthTokenPayload("sub") userId: string, @IpAddress() ip: string) {
-    return await this.authService.requestVerifyAccount(userId, ip);
+  @ApiOperation({ summary: "Send email to verify account" })
+  @ApiBearerAuth()
+  @ApiCreatedResponse({ description: "Verification email sent", type: ResponseVM })
+  @ApiUnauthorizedResponse({ description: "Missing auth token", type: UnauthorizedExceptionVM })
+  async requestVerifyAccount(@AuthTokenPayload("sub") userId: string, @IpAddress() ip: string): Promise<ResponseVM> {
+    const result = await this.authService.requestVerifyAccount(userId, ip);
+
+    return {
+      message: this.i18nService.t(`auth.${result}`),
+      data: undefined,
+    };
   }
 
   @Post("verify-account")
-  async verifyAccount(@Body() data: VerifyAccountDto, @IpAddress() ip: string) {
-    return await this.authService.verifyAccount(data, ip);
-  }
+  @ApiOperation({ summary: "Verify account using verification code" })
+  @ApiBody({ type: VerifyAccountDto })
+  @ApiOkResponse({ description: "Account verified successfully", type: ResponseVM })
+  @ApiBadRequestResponse({ description: "Invalid or expired code", type: BadRequestExceptionVM })
+  async verifyAccount(@Body() data: VerifyAccountDto, @IpAddress() ip: string): Promise<ResponseVM> {
+    await this.authService.verifyAccount(data, ip);
 
-  @Get("oauth")
-  getOauthUrl(@Query("provider") provider: EOauthProvider) {
-    return this.authService.getOauthUrl(provider);
-  }
-
-  @Post("oauth")
-  async oauthCallback(
-    @Query("provider") provider: EOauthProvider,
-    @Query("code") code: string,
-    @IpAddress() ip: string,
-    @RequestAgent() userAgent: UserAgent,
-    @Res() response: Response,
-  ) {
-    return this.authService.handleOAuthCallback(provider, code, ip, userAgent, response);
+    return {
+      message: this.i18nService.t("auth.verify-account-success"),
+      data: undefined,
+    };
   }
 }
