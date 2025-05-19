@@ -20,7 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@duongtrungnguyen/micro-commerce": "^0.0.25",
+    "@duongtrungnguyen/micro-commerce": "^0.0.28",
     "@duongtrungnguyen/nestro": "^0.1.22",
     "@grpc/grpc-js": "^1.13.3",
     "@grpc/proto-loader": "^0.7.15",

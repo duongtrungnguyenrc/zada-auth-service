@@ -1,5 +1,5 @@
-import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, ApiTemporaryRedirectResponse } from "@nestjs/swagger";
-import { BadRequestExceptionVM, IpAddress, RequestAgent, UserAgent } from "@duongtrungnguyen/micro-commerce";
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, ApiTemporaryRedirectResponse, ApiUnauthorizedResponse } from "@nestjs/swagger";
+import { BadRequestExceptionVM, HttpResponse, IpAddress, RequestAgent, UnauthorizedExceptionVM, UserAgent } from "@duongtrungnguyen/micro-commerce";
 import { Controller, Get, Post, Query, Res } from "@nestjs/common";
 import { I18nService } from "nestjs-i18n";
 import { Response } from "express";
@@ -16,7 +16,7 @@ export class OauthController {
     private readonly i18nService: I18nService,
   ) {}
 
-  @Get("oauth")
+  @Get()
   @ApiOperation({ summary: "Get OAuth2 login URL" })
   @ApiQuery({ name: "provider", enum: EOauthProvider })
   @ApiOkResponse({ description: "OAuth URL generated", type: GetOAuthResponseVM })
@@ -24,17 +24,16 @@ export class OauthController {
   getOauthUrl(@Query("provider") provider: EOauthProvider): GetOAuthResponseVM {
     const url = this.oauthService.getOauthUrl(provider);
 
-    return {
-      message: this.i18nService.t("auth.get-oauth-success"),
-      data: url,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.get-oauth-success"), url);
   }
 
-  @Post("oauth")
+  @Post()
   @ApiOperation({ summary: "Handle OAuth2 callback" })
   @ApiQuery({ name: "provider", enum: EOauthProvider })
   @ApiQuery({ name: "code", type: String })
   @ApiTemporaryRedirectResponse({ description: "Oauth success. Redirect to client" })
+  @ApiUnauthorizedResponse({ description: "Oauth account not enough info", type: UnauthorizedExceptionVM })
+  @ApiBadRequestResponse({ description: "Missing required params or validation failed" })
   async oauthCallback(
     @Query("provider") provider: EOauthProvider,
     @Query("code") code: string,

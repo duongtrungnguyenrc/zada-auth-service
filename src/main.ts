@@ -1,5 +1,6 @@
 import { createNestroApplication } from "@duongtrungnguyen/nestro";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { I18nMiddleware } from "nestjs-i18n";
 
@@ -18,11 +19,11 @@ async function bootstrap() {
     client: {
       name: serviceName,
       host: configService.getOrThrow<string>("SERVICE_HOST"),
-      port: configService.getOrThrow<number>("SERVICE_PORT"),
     },
   });
 
   app.use(I18nMiddleware);
+  app.useGlobalPipes(new ValidationPipe({}));
   app.setGlobalPrefix("auth");
 
   const documentConfig = new DocumentBuilder().setTitle(serviceName).build();

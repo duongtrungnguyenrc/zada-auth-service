@@ -14,13 +14,14 @@ import {
   AuthTokenPayload,
   BadRequestExceptionVM,
   HttpExceptionsFilter,
+  HttpResponse,
   IpAddress,
   RequestAgent,
   ResponseVM,
   UnauthorizedExceptionVM,
   UserAgent,
 } from "@duongtrungnguyen/micro-commerce";
-import { Body, Controller, HttpCode, Post, Put, Res, UseFilters, UsePipes, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, Put, Res, UseFilters } from "@nestjs/common";
 import { I18nService } from "nestjs-i18n";
 import { Response } from "express";
 
@@ -30,7 +31,6 @@ import { AuthService } from "./auth.service";
 
 @ApiTags("Auth")
 @Controller()
-@UsePipes(ValidationPipe)
 @UseFilters(HttpExceptionsFilter)
 export class AuthController {
   constructor(
@@ -58,10 +58,7 @@ export class AuthController {
   async login(@Body() data: LoginDto, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent): Promise<ResponseVM<LoginVM>> {
     const responseData = await this.authService.login(data, ip, userAgent);
 
-    return {
-      message: this.i18nService.t("auth.login-success"),
-      data: responseData,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.login-success"), responseData);
   }
 
   @Post("logout")
@@ -72,10 +69,7 @@ export class AuthController {
   async logOut(@AuthToken() token: string): Promise<ResponseVM> {
     await this.authService.logOut(token);
 
-    return {
-      message: this.i18nService.t("auth.logout-success"),
-      data: undefined,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.logout-success"));
   }
 
   @Post("refresh-token")
@@ -86,10 +80,7 @@ export class AuthController {
   async refreshToken(@AuthToken() oldToken: string, @IpAddress() ip: string, @RequestAgent() userAgent: UserAgent): Promise<LoginResponseVM> {
     const responseData = await this.authService.refreshToken(oldToken, ip, userAgent);
 
-    return {
-      message: this.i18nService.t("auth.refresh-success"),
-      data: responseData,
-    };
+    return HttpResponse.created(this.i18nService.t("auth.refresh-success"), responseData);
   }
 
   @Post("forgot-password")
@@ -100,24 +91,18 @@ export class AuthController {
   async forgotPassword(@Body() data: ForgotPasswordDto, @IpAddress() ip: string): Promise<ResponseVM> {
     await this.authService.forgotPassword(data, ip);
 
-    return {
-      message: this.i18nService.t("auth.forgot-password-success"),
-      data: undefined,
-    };
+    return HttpResponse.created(this.i18nService.t("auth.forgot-password-success"));
   }
 
   @Post("reset-password")
   @ApiOperation({ summary: "Reset password" })
   @ApiBody({ type: ResetPasswordDto })
-  @ApiCreatedResponse({ description: "Password reset successfully", type: ResponseVM })
+  @ApiOkResponse({ description: "Password reset successfully", type: ResponseVM })
   @ApiBadRequestResponse({ description: "Invalid token or password", type: BadRequestExceptionVM })
   async resetPassword(@Body() data: ResetPasswordDto, @IpAddress() ip: string): Promise<ResponseVM> {
     await this.authService.resetPassword(data, ip);
 
-    return {
-      message: this.i18nService.t("auth.reset-password-success"),
-      data: undefined,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.reset-password-success"));
   }
 
   @Put("password")
@@ -130,10 +115,7 @@ export class AuthController {
   async updatePassword(@AuthTokenPayload("sub") userId: string, @Body() data: UpdatePasswordDto): Promise<ResponseVM> {
     await this.authService.updatePassword(userId, data);
 
-    return {
-      message: this.i18nService.t("auth.update-password-success"),
-      data: undefined,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.update-password-success"));
   }
 
   @Post("request-verify-account")
@@ -144,10 +126,7 @@ export class AuthController {
   async requestVerifyAccount(@AuthTokenPayload("sub") userId: string, @IpAddress() ip: string): Promise<ResponseVM> {
     const result = await this.authService.requestVerifyAccount(userId, ip);
 
-    return {
-      message: this.i18nService.t(`auth.${result}`),
-      data: undefined,
-    };
+    return HttpResponse.created(this.i18nService.t(`auth.${result}`));
   }
 
   @Post("verify-account")
@@ -158,9 +137,6 @@ export class AuthController {
   async verifyAccount(@Body() data: VerifyAccountDto, @IpAddress() ip: string): Promise<ResponseVM> {
     await this.authService.verifyAccount(data, ip);
 
-    return {
-      message: this.i18nService.t("auth.verify-account-success"),
-      data: undefined,
-    };
+    return HttpResponse.ok(this.i18nService.t("auth.verify-account-success"));
   }
 }
