@@ -4,8 +4,9 @@ import { Auth, google } from "googleapis";
 import { I18nService } from "nestjs-i18n";
 import { v4 as uuid } from "uuid";
 
-import { CreateUserRequest, GetUserRequest, UserClientService, UserResponse } from "~user-client";
 import { SessionService } from "~session";
+import { AccountService } from "~account";
+import { AuthService } from "~auth";
 import { JwtService } from "~jwt";
 
 import { OAuthStrategy } from "../interfaces";
@@ -16,9 +17,10 @@ import { EOAuthScopes } from "../enums";
 export class GoogleOAuthStrategy implements OAuthStrategy {
   constructor(
     @Inject(OAUTH_CLIENT) private readonly googleClient: Auth.OAuth2Client,
-    private readonly userClientService: UserClientService,
-    private readonly jwtService: JwtService,
+    private readonly accountService: AccountService,
+    private readonly authService: AuthService,
     private readonly sessionService: SessionService,
+    private readonly jwtService: JwtService,
     private readonly i18nService: I18nService,
   ) {}
 
@@ -47,28 +49,26 @@ export class GoogleOAuthStrategy implements OAuthStrategy {
       throw new UnauthorizedException(this.i18nService.t("auth.no-google-email"));
     }
 
-    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", { filter: { email }, select: ["id"] });
+    const account = await this.accountService.get([{ email }], ["id"]);
 
-    let userId: string = user?.id || "";
+    let accountId: string = account?.id || "";
 
-    if (!user) {
-      const { data: newUser } = await this.userClientService.call<CreateUserRequest, UserResponse>("create", {
-        data: {
-          fullName: userInfo.data.name ?? "Unknown",
-          email,
-          passwordHash: "-",
-          phoneNumber: me.data.phoneNumbers?.[0]?.value ?? "",
-        },
+    if (!account) {
+      const newUser = await this.authService._firstTimeRegister({
+        fullName: userInfo.data.name ?? "Unknown",
+        email,
+        password: "-",
+        phoneNumber: me.data.phoneNumbers?.[0]?.value ?? "",
       });
 
-      userId = newUser!.id;
+      accountId = newUser.id;
     }
 
     const jit: string = uuid();
-    const token: string = this.jwtService.generateToken({ sub: userId, jit });
+    const token: string = this.jwtService.generateToken({ sub: accountId, jit });
 
     await this.sessionService.createSession({
-      userId,
+      accountId,
       jit,
       ip,
       userAgent,

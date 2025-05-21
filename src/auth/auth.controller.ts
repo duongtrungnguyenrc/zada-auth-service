@@ -21,7 +21,7 @@ import {
   UnauthorizedExceptionVM,
   UserAgent,
 } from "@duongtrungnguyen/micro-commerce";
-import { Body, Controller, HttpCode, Post, Put, Res, UseFilters } from "@nestjs/common";
+import { Body, Controller, HttpCode, HttpStatus, Post, Put, Res, UseFilters } from "@nestjs/common";
 import { I18nService } from "nestjs-i18n";
 import { Response } from "express";
 
@@ -95,6 +95,7 @@ export class AuthController {
   }
 
   @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Reset password" })
   @ApiBody({ type: ResetPasswordDto })
   @ApiOkResponse({ description: "Password reset successfully", type: ResponseVM })
@@ -130,7 +131,9 @@ export class AuthController {
   }
 
   @Post("verify-account")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Verify account using verification code" })
+  @ApiBearerAuth()
   @ApiBody({ type: VerifyAccountDto })
   @ApiOkResponse({ description: "Account verified successfully", type: ResponseVM })
   @ApiBadRequestResponse({ description: "Invalid or expired code", type: BadRequestExceptionVM })

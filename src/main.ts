@@ -5,11 +5,10 @@ import { ConfigService } from "@nestjs/config";
 import { I18nMiddleware } from "nestjs-i18n";
 
 import { AppModule } from "~app.module";
+import { MicroserviceOptions, Transport } from "@nestjs/microservices";
 
 async function bootstrap() {
   const configService: ConfigService = new ConfigService();
-
-  const serviceName = configService.getOrThrow<string>("SERVICE_NAME");
 
   const app = await createNestroApplication(AppModule, {
     server: {
@@ -17,7 +16,7 @@ async function bootstrap() {
       port: configService.getOrThrow<number>("NESTRO_PORT"),
     },
     client: {
-      name: serviceName,
+      name: configService.getOrThrow<string>("SERVICE_NAME"),
       host: configService.getOrThrow<string>("SERVICE_HOST"),
     },
   });
@@ -26,13 +25,21 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({}));
   app.setGlobalPrefix("auth");
 
-  const documentConfig = new DocumentBuilder().setTitle(serviceName).build();
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.NATS,
+    options: {
+      servers: [configService.getOrThrow<string>("NATS_URL")],
+    },
+  });
+
+  const documentConfig = new DocumentBuilder().build();
   const swaggerDocument = SwaggerModule.createDocument(app, documentConfig);
 
   SwaggerModule.setup("api", app, swaggerDocument, {
     jsonDocumentUrl: "api-docs-json",
   });
 
+  app.startAllMicroservices();
   await app.listen();
 }
 bootstrap();

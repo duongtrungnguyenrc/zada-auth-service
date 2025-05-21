@@ -10,7 +10,7 @@ export class RegisterAccountDto {
   @IsEmail({}, { message: "validation.invalid-email" })
   email: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @IsUrl({}, { message: "validation.invalid-url" })
   @IsOptional()
   avatarUrl?: string;

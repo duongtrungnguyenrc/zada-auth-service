@@ -2,18 +2,18 @@ import { FactoryProvider, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Auth, google } from "googleapis";
 
-import { UserClientModule } from "~user-client";
 import { SessionModule } from "~session";
+import { AuthModule } from "~auth";
 import { JwtModule } from "~jwt";
 
-import { GoogleOAuthStrategy } from "./strategies";
 import { OauthController } from "./oauth.controller";
+import { GoogleOAuthStrategy } from "./strategies";
 import { OauthService } from "./oauth.service";
 import { OAuthFactory } from "./factories";
 import { OAUTH_CLIENT } from "./constants";
 
 @Module({
-  imports: [UserClientModule, JwtModule, SessionModule],
+  imports: [AuthModule, JwtModule, SessionModule],
   providers: [
     {
       provide: OAUTH_CLIENT,

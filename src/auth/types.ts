@@ -1,12 +1,12 @@
 export type ForgotPasswordSession = {
   otp: string;
-  userId: string;
+  accountId: string;
   ip: string;
 };
 
 export type VerifyAccountSession = {
   otp: string;
-  userId: string;
+  accountId: string;
   ip: string;
 };
 

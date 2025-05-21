@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, InternalServerErrorException, NotAcceptableException, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotAcceptableException, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { JwtPayload, UserAgent } from "@duongtrungnguyen/micro-commerce";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { ClientProxy } from "@nestjs/microservices";
@@ -8,7 +8,8 @@ import { I18nService } from "nestjs-i18n";
 import { Cache } from "cache-manager";
 import { v4 as uuid } from "uuid";
 
-import { UserVM, UserClientService, GetUserRequest, UpdateUserRequest, CreateUserRequest, UserResponse } from "~user-client";
+import { UserVM, UserClientService, GetUserRequest, UserResponse } from "~user-client";
+import { AccountService, AccountVM } from "~account";
 import { SessionService } from "~/session";
 import { NATS_CLIENT } from "~nats-client";
 import { JwtService } from "~/jwt";
@@ -23,6 +24,7 @@ export class AuthService {
     @Inject(NATS_CLIENT) private readonly natsClient: ClientProxy,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly userClientService: UserClientService,
+    private readonly accountService: AccountService,
     private readonly sessionService: SessionService,
     private readonly configService: ConfigService,
     private readonly i18nService: I18nService,
@@ -30,48 +32,41 @@ export class AuthService {
   ) {}
 
   async register(data: RegisterAccountDto, ip: string): Promise<string> {
-    const { data: existingUser } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
-      filter: { email: data.email },
-      select: ["id"],
-    });
+    /* Check user collision */
+    const existingUser = await this.accountService.get([{ email: data.email }, { phoneNumber: data.phoneNumber }], ["id", "email", "phoneNumber"]);
 
-    if (existingUser) {
-      throw new ConflictException(this.i18nService.t("auth.user-existed"));
+    if (existingUser?.email === data.email) {
+      throw new ConflictException(this.i18nService.t("auth.email-used"));
     }
 
-    const { password, ...restUser } = data;
-
-    const { data: createdUser } = await this.userClientService.call<CreateUserRequest, UserResponse>("create", {
-      data: { ...restUser, passwordHash: await this._hashPassword(password) },
-    });
-
-    if (!createdUser) {
-      throw new InternalServerErrorException(this.i18nService.t("auth.register-failed"));
+    if (existingUser?.phoneNumber === data.phoneNumber) {
+      throw new ConflictException(this.i18nService.t("auth.phone-used"));
     }
 
-    await this.requestVerifyAccount(createdUser.id, ip);
+    const createdAccount = await this._firstTimeRegister(data);
+
+    /* First time verify account */
+    await this.requestVerifyAccount(createdAccount.id, ip);
 
     const clientBaseUrl: string = this.configService.getOrThrow<string>("CLIENT_BASE_URL");
     const accountVerifyPath: string = this.configService.getOrThrow<string>("ACCOUNT_VERIFY_PATH");
 
-    return `${clientBaseUrl}/${accountVerifyPath}?userId=${createdUser.id}`;
+    /* Return to client verify account page */
+    return `${clientBaseUrl}/${accountVerifyPath}?accountId=${createdAccount.id}`;
   }
 
   async login(data: LoginDto, ip: string, userAgent: UserAgent): Promise<LoginVM> {
-    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
-      filter: { email: data.email },
-      select: ["id", "passwordHash", "isActive"],
-    });
+    const account = await this.accountService.get([{ email: data.email }], ["id", "passwordHash", "willDeleteTime"]);
 
-    if (!user) {
+    if (!account) {
       throw new UnauthorizedException(this.i18nService.t("auth.user-not-found"));
     }
 
-    if (!user.isActive) {
+    if (!account.willDeleteTime) {
       throw new UnauthorizedException(this.i18nService.t("auth.user-inactive"));
     }
 
-    const matchPassword: boolean = await compare(data.password, user.passwordHash);
+    const matchPassword: boolean = await compare(data.password, account.passwordHash);
 
     if (!matchPassword) {
       throw new UnauthorizedException(this.i18nService.t("auth.invalid-login"));
@@ -80,12 +75,12 @@ export class AuthService {
     const jit: string = uuid();
 
     const token: string = this.jwtService.generateToken({
-      sub: user.id,
+      sub: account.id,
       jit,
     });
 
     await this.sessionService.createSession({
-      userId: user.id,
+      accountId: account.id,
       jit,
       ip,
       userAgent,
@@ -103,13 +98,13 @@ export class AuthService {
       throw new UnauthorizedException(this.i18nService.t("auth.no-auth"));
     }
 
-    const { sub: userId, jit } = payload;
+    const { sub: accountId, jit } = payload;
 
     await Promise.all([
       this.sessionService.updateSession(
         {
           jit,
-          userId,
+          accountId,
         },
         {
           expiresAt: null,
@@ -130,14 +125,14 @@ export class AuthService {
       throw new UnauthorizedException(this.i18nService.t("auth.no-auth"));
     }
 
-    const { sub: userId, jit } = payload;
+    const { sub: accountId, jit } = payload;
 
     const newJit: string = uuid();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14);
 
     await this.sessionService.updateSession(
-      { jit, userId },
+      { jit, accountId },
       {
         jit: newJit,
         expiresAt: expiresAt,
@@ -146,7 +141,7 @@ export class AuthService {
       },
     );
 
-    const newToken: string = this.jwtService.generateToken({ sub: userId, jit: newJit });
+    const newToken: string = this.jwtService.generateToken({ sub: accountId, jit: newJit });
     await this.jwtService.revokeToken(payload);
 
     return {
@@ -154,9 +149,9 @@ export class AuthService {
     };
   }
 
-  async requestVerifyAccount(userId: string, ip: string): Promise<boolean> {
+  async requestVerifyAccount(accountId: string, ip: string): Promise<boolean> {
     const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
-      filter: { id: userId },
+      filters: [{ id: accountId }],
       select: ["id", "email", "fullName"],
     });
 
@@ -167,10 +162,11 @@ export class AuthService {
     const otp: string = this._generateOtp();
     const sessionId: string = uuid();
 
-    await this.cacheManager.set<VerifyAccountSession>(`otp:verify-user:${sessionId}`, { otp, userId: userId, ip }, 15 * 60 * 1000);
+    await this.cacheManager.set<VerifyAccountSession>(`otp:verify-user:${sessionId}`, { otp, accountId: accountId, ip }, 15 * 60 * 1000);
 
     this.natsClient.emit("noti.email.verify-account", {
       otp,
+      sessionId,
       email: user.email,
       fullName: user.fullName,
     });
@@ -193,15 +189,10 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
-      filter: { id: cachedSession.userId },
-      updates: {
-        isVerified: true,
-      },
-    });
+    await this.accountService.update({ id: cachedSession.accountId }, { isVerified: true });
 
     if (newUser) {
-      this.natsClient.emit("noti.email.new-user", {
+      this.natsClient.emit("noti.email.new-account", {
         userName: newUser.fullName,
         email: newUser.email,
       });
@@ -214,7 +205,7 @@ export class AuthService {
 
   async forgotPassword(data: ForgotPasswordDto, ip: string): Promise<boolean> {
     const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", {
-      filter: { id: data.userId },
+      filters: [{ id: data.accountId }],
       select: ["id", "email", "fullName"],
     });
 
@@ -225,10 +216,11 @@ export class AuthService {
     const otp: string = this._generateOtp();
     const sessionId: string = uuid();
 
-    await this.cacheManager.set<ForgotPasswordSession>(`otp:reset-password:${sessionId}`, { otp, userId: user.id, ip }, 15 * 60 * 1000);
+    await this.cacheManager.set<ForgotPasswordSession>(`otp:reset-password:${sessionId}`, { otp, accountId: user.id, ip }, 15 * 60 * 1000);
 
     this.natsClient.emit("noti.email.reset-password", {
       otp,
+      sessionId,
       email: user.email,
       fullName: user.fullName,
     });
@@ -251,40 +243,45 @@ export class AuthService {
       throw new NotAcceptableException(this.i18nService.t("auth.otp-incorrect"));
     }
 
-    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
-      filter: { id: cachedSession.userId },
-      updates: {
-        passwordHash: await this._hashPassword(data.newPassword),
-      },
-    });
+    await this.accountService.update({ id: cachedSession.accountId }, { passwordHash: await this._hashPassword(data.newPassword) });
 
     return true;
   }
 
-  async updatePassword(userId: string, data: UpdatePasswordDto): Promise<boolean> {
-    const { data: user } = await this.userClientService.call<GetUserRequest, UserResponse>("get", { filter: { id: userId }, select: ["passwordHash"] });
+  async updatePassword(accountId: string, data: UpdatePasswordDto): Promise<boolean> {
+    const account = await this.accountService.get([{ id: accountId }], ["passwordHash"]);
 
-    if (!user) {
+    if (!account) {
       throw new NotAcceptableException(this.i18nService.t("auth.user-not-found"));
     }
 
-    const isPasswordMatch = await compare(user.passwordHash, data.password);
+    const isPasswordMatch = await compare(account.passwordHash, data.password);
 
     if (isPasswordMatch) {
       throw new NotAcceptableException(this.i18nService.t("auth.wrong-password"));
     }
 
-    await this.userClientService.call<UpdateUserRequest, UserResponse>("update", {
-      filter: { id: userId },
-      updates: {
-        passwordHash: await this._hashPassword(data.newPassword),
-      },
-    });
+    await this.accountService.update({ id: accountId }, { passwordHash: await this._hashPassword(data.newPassword) });
 
     return true;
   }
 
   /* Internal support methods */
+
+  async _firstTimeRegister(data: RegisterAccountDto): Promise<AccountVM> {
+    const { password, ...user } = data;
+
+    const createdAccount = await this.accountService.create({
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      passwordHash: await this._hashPassword(password),
+    });
+
+    /* Sync data with user service */
+    this.natsClient.emit("user.create", user);
+
+    return createdAccount;
+  }
 
   private _generateOtp(): string {
     return Array(6)

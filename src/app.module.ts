@@ -7,6 +7,7 @@ import { Module } from "@nestjs/common";
 import * as path from "path";
 
 import { NatsClientModule } from "~nats-client";
+import { AccountModule } from "~account";
 import { AuthModule } from "~auth";
 
 @Module({
@@ -42,6 +43,7 @@ import { AuthModule } from "~auth";
       inject: [ConfigService],
     }),
     NatsClientModule,
+    AccountModule,
     AuthModule,
   ],
 })

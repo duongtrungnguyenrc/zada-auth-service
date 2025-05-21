@@ -11,30 +11,22 @@ import { Observable } from "rxjs";
 
 export const protobufPackage = "user";
 
-export interface CreateUserDto {
-  fullName: string;
-  email: string;
-  avatarUrl?: string | undefined;
-  passwordHash: string;
-  phoneNumber: string;
-}
-
 export interface UpdateUserDto {
+  email?: string | undefined;
   fullName?: string | undefined;
   avatarUrl?: string | undefined;
-  passwordHash?: string | undefined;
   phoneNumber?: string | undefined;
-  isVerified?: boolean | undefined;
-  isActive?: boolean | undefined;
+  isSeller?: boolean | undefined;
 }
 
 export interface UserFilterDto {
   id?: string | undefined;
   email?: string | undefined;
+  phoneNumber?: string | undefined;
 }
 
-export interface CreateUserRequest {
-  data: CreateUserDto | undefined;
+export interface UsersFilterDto {
+  ids: string[];
 }
 
 export interface UpdateUserRequest {
@@ -43,12 +35,12 @@ export interface UpdateUserRequest {
 }
 
 export interface GetUserRequest {
-  filter: UserFilterDto | undefined;
+  filters: UserFilterDto[];
   select: string[];
 }
 
 export interface GetUsersRequest {
-  filter: UserFilterDto | undefined;
+  filter: UsersFilterDto | undefined;
   select: string[];
 }
 
@@ -60,9 +52,7 @@ export interface UserVM {
   fullName: string;
   createdAt: Date | undefined;
   updatedAt: Date | undefined;
-  passwordHash: string;
-  isActive: boolean;
-  isVerified: boolean;
+  isSeller: boolean;
 }
 
 export interface UserResponse {
@@ -85,8 +75,6 @@ wrappers[".google.protobuf.Timestamp"] = {
 } as any;
 
 export interface UserServiceClient {
-  create(request: CreateUserRequest): Observable<UserResponse>;
-
   update(request: UpdateUserRequest): Observable<UserResponse>;
 
   get(request: GetUserRequest): Observable<UserResponse>;
@@ -95,8 +83,6 @@ export interface UserServiceClient {
 }
 
 export interface UserServiceController {
-  create(request: CreateUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
-
   update(request: UpdateUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
 
   get(request: GetUserRequest): Promise<UserResponse> | Observable<UserResponse> | UserResponse;
@@ -106,7 +92,7 @@ export interface UserServiceController {
 
 export function UserServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ["create", "update", "get", "getUsers"];
+    const grpcMethods: string[] = ["update", "get", "getUsers"];
     for (const method of grpcMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
       GrpcMethod("UserService", method)(constructor.prototype[method], method, descriptor);

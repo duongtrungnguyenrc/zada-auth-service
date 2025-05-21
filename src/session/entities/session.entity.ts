@@ -3,26 +3,26 @@ import { UserAgent } from "@duongtrungnguyen/micro-commerce";
 
 import { ISession } from "../interfaces";
 
-@Entity("session")
+@Entity("sessions")
 export class SessionEntity implements ISession {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn("identity")
   id: string;
 
   @Column({ unique: true })
   jit: string;
 
-  @Column()
-  userId: string;
+  @Column({ name: "account_id" })
+  accountId: string;
 
-  @Column({ type: "jsonb" })
+  @Column({ name: "user_agent", type: "jsonb" })
   userAgent: UserAgent;
 
-  @Column()
+  @Column({ length: 30 })
   ip: string;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ name: "expires_at", type: "timestamp", nullable: true })
   expiresAt: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 }
