@@ -31,9 +31,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(data: RegisterAccountDto, ip: string): Promise<string> {
+  async register(data: RegisterAccountDto): Promise<AccountVM> {
     /* Check user collision */
-    const existingUser = await this.accountService.get([{ email: data.email }, { phoneNumber: data.phoneNumber }], ["id", "email", "phoneNumber"]);
+    const existingUser = await this.accountService.get([{ email: data.email }, { phoneNumber: data.phoneNumber }], { select: ["id", "email", "phoneNumber"] });
 
     if (existingUser?.email === data.email) {
       throw new ConflictException(this.i18nService.t("auth.email-used"));
@@ -43,24 +43,14 @@ export class AuthService {
       throw new ConflictException(this.i18nService.t("auth.phone-used"));
     }
 
-    const createdAccount = await this._firstTimeRegister(data);
-
-    /* First time verify account */
-    await this.requestVerifyAccount(createdAccount.id, ip);
-
-    const clientBaseUrl: string = this.configService.getOrThrow<string>("CLIENT_BASE_URL");
-    const accountVerifyPath: string = this.configService.getOrThrow<string>("ACCOUNT_VERIFY_PATH");
-
-    /* Return to client verify account page */
-    return `${clientBaseUrl}/${accountVerifyPath}?accountId=${createdAccount.id}`;
+    return await this._firstTimeRegister(data);
   }
 
   async login(data: LoginDto, ip: string, userAgent: UserAgent): Promise<LoginVM> {
-    const account = await this.accountService.get([{ email: data.email }], ["id", "passwordHash", "willDeleteTime"]);
-
-    if (!account) {
-      throw new UnauthorizedException(this.i18nService.t("auth.user-not-found"));
-    }
+    const account = await this.accountService.getOrThrow([{ email: data.email }], {
+      select: ["id", "passwordHash", "willDeleteTime"],
+      notFoundMessage: this.i18nService.t("auth.user-not-found"),
+    });
 
     if (!account.willDeleteTime) {
       throw new UnauthorizedException(this.i18nService.t("auth.user-inactive"));
@@ -249,11 +239,7 @@ export class AuthService {
   }
 
   async updatePassword(accountId: string, data: UpdatePasswordDto): Promise<boolean> {
-    const account = await this.accountService.get([{ id: accountId }], ["passwordHash"]);
-
-    if (!account) {
-      throw new NotAcceptableException(this.i18nService.t("auth.user-not-found"));
-    }
+    const account = await this.accountService.getOrThrow([{ id: accountId }], { select: ["passwordHash"], notFoundMessage: this.i18nService.t("auth.user-not-found") });
 
     const isPasswordMatch = await compare(account.passwordHash, data.password);
 

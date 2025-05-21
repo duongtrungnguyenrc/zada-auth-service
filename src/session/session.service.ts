@@ -1,3 +1,4 @@
+import { RepositoryService } from "@duongtrungnguyen/micro-commerce";
 import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { FindOptionsWhere, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -8,31 +9,27 @@ import { SessionEntity } from "./entities";
 import { ISession } from "./interfaces";
 
 @Injectable()
-export class SessionService {
+export class SessionService extends RepositoryService<SessionEntity> {
   constructor(
-    @InjectRepository(SessionEntity) private readonly sessionRepository: Repository<SessionEntity>,
+    @InjectRepository(SessionEntity) sessionRepository: Repository<SessionEntity>,
     private readonly i18nService: I18nService,
-  ) {}
+  ) {
+    super(sessionRepository);
+  }
 
   async createSession(data: CreateSessionDto): Promise<ISession> {
     const expiresAt = new Date();
 
     expiresAt.setDate(expiresAt.getDate() + 14);
 
-    const session = this.sessionRepository.create({
+    return await this.create({
       ...data,
       expiresAt,
     });
-
-    return await this.sessionRepository.save(session);
   }
 
   async updateSession(filter: FindOptionsWhere<SessionEntity>, updates: Partial<ISession>) {
-    const session = await this.sessionRepository.findOneBy(filter);
-
-    if (!session) {
-      throw new UnauthorizedException(this.i18nService.t("auth.session-not-found"));
-    }
+    const session = await this.getOrThrow(filter, { notFoundMessage: this.i18nService.t("auth.session-not-found") });
 
     const now = new Date();
 
@@ -40,7 +37,7 @@ export class SessionService {
       throw new UnauthorizedException(this.i18nService.t("auth.session-expired"));
     }
 
-    return await this.sessionRepository.save({
+    return await this.repository.save({
       ...session,
       ...updates,
     });

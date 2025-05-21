@@ -1,14 +1,4 @@
-import {
-  ApiBearerAuth,
-  ApiBody,
-  ApiCreatedResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-  ApiUnauthorizedResponse,
-  ApiBadRequestResponse,
-  ApiPermanentRedirectResponse,
-} from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse, ApiBadRequestResponse } from "@nestjs/swagger";
 import {
   AuthToken,
   AuthTokenPayload,
@@ -21,12 +11,12 @@ import {
   UnauthorizedExceptionVM,
   UserAgent,
 } from "@duongtrungnguyen/micro-commerce";
-import { Body, Controller, HttpCode, HttpStatus, Post, Put, Res, UseFilters } from "@nestjs/common";
+import { Body, Controller, HttpCode, HttpStatus, Post, Put, UseFilters } from "@nestjs/common";
 import { I18nService } from "nestjs-i18n";
-import { Response } from "express";
 
 import { ForgotPasswordDto, LoginDto, RegisterAccountDto, ResetPasswordDto, VerifyAccountDto, UpdatePasswordDto } from "./dtos";
 import { LoginResponseVM, LoginVM } from "./vms";
+import { AccountResponseVM } from "~account";
 import { AuthService } from "./auth.service";
 
 @ApiTags("Auth")
@@ -41,12 +31,12 @@ export class AuthController {
   @Post("register")
   @ApiOperation({ summary: "Register new user account" })
   @ApiBody({ type: RegisterAccountDto })
-  @ApiPermanentRedirectResponse({ description: "Account registered successfully. Redirect to verify user" })
+  @ApiCreatedResponse({ description: "Account registered successfully. Return accountInfo", type: AccountResponseVM })
   @ApiBadRequestResponse({ description: "Validation failed", type: BadRequestExceptionVM })
-  async register(@Body() data: RegisterAccountDto, @IpAddress() ip: string, @Res() response: Response): Promise<void> {
-    const redirectUrl = await this.authService.register(data, ip);
+  async register(@Body() data: RegisterAccountDto): Promise<AccountResponseVM> {
+    const { passwordHash: _, ...account } = await this.authService.register(data);
 
-    return response.redirect(redirectUrl);
+    return HttpResponse.created(this.i18nService.t("auth.register-success"), account);
   }
 
   @Post("login")
@@ -142,4 +132,6 @@ export class AuthController {
 
     return HttpResponse.ok(this.i18nService.t("auth.verify-account-success"));
   }
+
+  async requestActiveAccount() {}
 }

@@ -49,7 +49,7 @@ export class GoogleOAuthStrategy implements OAuthStrategy {
       throw new UnauthorizedException(this.i18nService.t("auth.no-google-email"));
     }
 
-    const account = await this.accountService.get([{ email }], ["id"]);
+    const account = await this.accountService.get([{ email }], { select: ["id"] });
 
     let accountId: string = account?.id || "";
 
